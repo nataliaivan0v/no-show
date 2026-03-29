@@ -13,6 +13,7 @@ export interface Spot {
   class_type: string
   studio: string
   scheduled_at: string
+  claim_info: string | null
   status: 'available' | 'claimed'
   created_at: string
 }

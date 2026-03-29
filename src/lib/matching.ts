@@ -12,13 +12,14 @@ export async function notifyNextSeeker(
     .from('waitlist_entries')
     .select('*')
     .contains('class_types', [spot.class_type])
+    .neq('seeker_id', spot.poster_id)
     .order('created_at', { ascending: true })
 
   if (!matches?.length) return false
 
   let target = matches[0]
   if (afterEntryId) {
-    const idx = matches.findIndex((e: { id: string }) => e.id === afterEntryId)
+    const idx = matches.findIndex(e => e.id === afterEntryId)
     if (idx === -1 || idx + 1 >= matches.length) return false
     target = matches[idx + 1]
   }
@@ -32,6 +33,15 @@ export async function notifyNextSeeker(
   })
 
   return true
+}
+
+export async function rejectSpot(notifId: string, spotId: string, waitlistEntryId: string): Promise<void> {
+  await supabase
+    .from('notifications')
+    .update({ status: 'expired' })
+    .eq('id', notifId)
+
+  await notifyNextSeeker(spotId, waitlistEntryId)
 }
 
 export async function simulateTimeout(spotId: string): Promise<string> {
