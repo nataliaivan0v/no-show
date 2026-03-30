@@ -126,7 +126,99 @@ src/
 5. If they claim it, they receive the full booking info instantly
 6. If they don't claim it or click "Not Interested," the spot moves to the next person in the queue automatically
 
+## Database Schema
+
+No Show uses four tables in Supabase Postgres. Row Level Security (RLS) is enabled on all tables to ensure users can only access data they are permitted to see or modify.
+
 ---
+
+### `profiles`
+
+Stores basic user information. A row is automatically created via a Postgres trigger (`handle_new_user`) when a new user signs up through Supabase Auth.
+
+| Column | Type | Notes |
+|---|---|---|
+| id | uuid | References `auth.users` |
+| full_name | text | Set at signup |
+| created_at | timestamptz | Auto-set |
+
+**Policies**
+
+- **Readable by all authenticated users** — The matching engine needs to read any user's profile to auto-fill the booking name when a spot is posted. Without this, the form couldn't fetch the poster's name.
+- **Editable by owner only** — A user can only update their own profile row, preventing anyone from modifying another user's name or details.
+
+---
+
+### `spots`
+
+Stores every class spot that has been posted. Each spot belongs to the user who posted it.
+
+| Column | Type | Notes |
+|---|---|---|
+| id | uuid | Primary key |
+| poster_id | uuid | References `profiles` |
+| title | text | Class name (e.g. Morning Flow) |
+| class_type | text | e.g. Yoga, Spin |
+| studio | text | Studio name |
+| location | text | Studio address |
+| scheduled_at | timestamptz | Class date and time |
+| class_level | text | Optional |
+| instructor | text | Optional |
+| claim_info | text | Revealed only after claiming |
+| status | text | `available` or `claimed` |
+| created_at | timestamptz | Auto-set |
+
+**Policies**
+
+- **Readable by all authenticated users** — Any logged-in user needs to be able to see available spots. The matching engine also reads spots to check for existing availability when a seeker joins the waitlist.
+- **Insertable by authenticated users** — Any user can post a spot since there are no fixed roles — the same person can be a poster or a seeker depending on the situation.
+- **Updatable by authenticated users** — Both the poster (managing their listing) and a seeker (marking a spot as claimed) need update access. Restricting updates to only the poster would break the claim flow.
+- **Deletable by owner only** — Only the user who posted the spot can delete it, preventing others from removing listings they don't own.
+
+---
+
+### `waitlist_entries`
+
+Stores each user's waitlist preferences. A user can have one active entry specifying the class types, level, and time of day they are looking for.
+
+| Column | Type | Notes |
+|---|---|---|
+| id | uuid | Primary key |
+| seeker_id | uuid | References `profiles` |
+| class_types | text[] | Array of preferred class types |
+| class_level | text | Optional preferred level |
+| time_preferences | text[] | morning / afternoon / evening |
+| created_at | timestamptz | Used to determine queue position |
+
+**Policies**
+
+- **Readable by all authenticated users** — The matching engine runs in the browser as the currently logged-in poster. It needs to query all waitlist entries to find matching seekers. Without this, the query would return no results and no notifications would ever be sent.
+- **Insertable by owner only** — A user can only create a waitlist entry for themselves, preventing someone from signing others up without their knowledge.
+- **Updatable by owner only** — Only the seeker can update their own preferences or have their queue position adjusted (e.g. bumped to the back after claiming a spot).
+- **Deletable by owner only** — A user can only remove their own waitlist entry.
+
+---
+
+### `notifications`
+
+Created by the matching engine when a seeker is found for a spot. Represents a pending, claimed, or expired offer sent to a specific seeker.
+
+| Column | Type | Notes |
+|---|---|---|
+| id | uuid | Primary key |
+| seeker_id | uuid | References `profiles` |
+| spot_id | uuid | References `spots` (cascades on delete) |
+| waitlist_entry_id | uuid | References `waitlist_entries` |
+| message | text | The notification text shown to the seeker |
+| status | text | `pending`, `claimed`, or `expired` |
+| created_at | timestamptz | Used to calculate the 30-min countdown |
+
+**Policies**
+
+- **Readable by recipient only** — A seeker should only see their own notifications. Showing one user's notifications to another would expose private spot details and booking info.
+- **Insertable by authenticated users** — The matching engine, running as the posting user, needs to insert a notification for a different user (the matched seeker). Restricting inserts to owner-only would break this entirely.
+- **Updatable by authenticated users** — Both the seeker (claiming or rejecting) and the system (expiring a notification when the timer runs out) need to update notification status. The seeker is not always the one triggering the update.
+- **Deletable by recipient only** — Only the seeker can delete their own notifications, keeping the inbox management personal and preventing others from clearing someone else's inbox.
 
 ## Notes
 
