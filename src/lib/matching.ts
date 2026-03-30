@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
 
+// Called when a spot is posted, and after a timeout
 export async function notifyNextSeeker(
   spotId: string,
   afterEntryId?: string
@@ -24,11 +25,23 @@ export async function notifyNextSeeker(
     target = matches[idx + 1]
   }
 
+  const details = [
+    spot.class_level,
+    spot.instructor ? `with ${spot.instructor}` : null,
+    spot.location,
+  ].filter(Boolean).join(' · ')
+
+  const message = [
+    `A ${spot.class_type} spot at ${spot.studio}${spot.title ? ` (${spot.title})` : ''} is available on ${new Date(spot.scheduled_at).toLocaleString()}.`,
+    details || null,
+    `Claim it before it's gone!`,
+  ].filter(Boolean).join('\n')
+
   await supabase.from('notifications').insert({
     seeker_id: target.seeker_id,
     spot_id: spot.id,
     waitlist_entry_id: target.id,
-    message: `A ${spot.class_type} spot at ${spot.studio} is available on ${new Date(spot.scheduled_at).toLocaleString()}. Claim it before it's gone!`,
+    message,
     status: 'pending'
   })
 

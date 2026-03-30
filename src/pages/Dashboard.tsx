@@ -1,40 +1,217 @@
-import { type Profile } from '../types'
-import PostSpotForm from '../components/Spots/PostSpotForm'
-import MyListings from '../components/Spots/MyListings'
-import WaitlistForm from '../components/Waitlist/WaitlistForm.tsx'
-import NotificationInbox from '../components/Waitlist/NotificationInbox.tsx'
+import { useEffect, useState } from 'react'
+import { type Profile, type Spot } from '../types'
+import { supabase } from '../lib/supabase'
 
-import { useState, useCallback } from 'react'
+interface SpotWithRole extends Spot {
+  role: 'claimed' | 'listed'
+}
 
 export default function Dashboard({ profile }: { profile: Profile }) {
-    const [refreshKey, setRefreshKey] = useState(0)
-    const refresh = useCallback(() => setRefreshKey(k => k + 1), [])
+  const [upcoming, setUpcoming] = useState<SpotWithRole[]>([])
+  const [listed, setListed] = useState<Spot[]>([])
+  const [pastTaken, setPastTaken] = useState<Spot[]>([])
+  const [pastListed, setPastListed] = useState<Spot[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const fetchAll = async () => {
+      const now = new Date().toISOString()
+
+      const { data: claimedNotifs } = await supabase
+        .from('notifications')
+        .select('spot_id')
+        .eq('seeker_id', profile.id)
+        .eq('status', 'claimed')
+
+      const claimedIds = claimedNotifs?.map(n => n.spot_id) ?? []
+
+      // Upcoming claimed
+      let upcomingClaimed: SpotWithRole[] = []
+      if (claimedIds.length) {
+        const { data } = await supabase
+          .from('spots').select('*')
+          .in('id', claimedIds)
+          .gte('scheduled_at', now)
+          .order('scheduled_at', { ascending: true })
+        upcomingClaimed = (data ?? []).map(s => ({ ...s, role: 'claimed' as const }))
+      }
+      setUpcoming(upcomingClaimed)
+
+      // Upcoming listed
+      const { data: listedData } = await supabase
+        .from('spots').select('*')
+        .eq('poster_id', profile.id)
+        .gte('scheduled_at', now)
+        .order('scheduled_at', { ascending: true })
+      setListed(listedData ?? [])
+
+      // Past taken (claimed by me)
+      if (claimedIds.length) {
+        const { data } = await supabase
+          .from('spots').select('*')
+          .in('id', claimedIds)
+          .lt('scheduled_at', now)
+          .order('scheduled_at', { ascending: false })
+        setPastTaken(data ?? [])
+      }
+
+      // Past listed (posted by me)
+      const { data: pastPosted } = await supabase
+        .from('spots').select('*')
+        .eq('poster_id', profile.id)
+        .lt('scheduled_at', now)
+        .order('scheduled_at', { ascending: false })
+      setPastListed(pastPosted ?? [])
+
+      setLoading(false)
+    }
+
+    fetchAll()
+  }, [profile.id])
+
+  if (loading) return <div style={{ padding: 48, fontFamily: "'Afacad', sans-serif", color: '#888' }}>Loading...</div>
 
   return (
-    <div style={{ maxWidth: 800, margin: '0 auto', padding: 24 }}>
-      <h2>My Dashboard</h2>
+    <div style={{ minHeight: '100vh', background: '#fff8f4', fontFamily: "'Afacad', sans-serif", padding: '40px 48px' }}>
+      <h1 style={{ fontFamily: "'Berkshire Swash', cursive", fontSize: 36, color: '#111', marginBottom: 40, textAlign: 'center' }}>
+        Dashboard
+      </h1>
 
-      <section>
-        <NotificationInbox seekerId={profile.id} />
-      </section>
+      {/* Top row — Upcoming + Listed side by side */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 48 }}>
+        <Column title="Upcoming Classes" subtitle="Spots you've claimed.">
+          {upcoming.length === 0
+            ? <EmptyState message="No upcoming classes." />
+            : upcoming.map(s => <SpotCard key={s.id} spot={s} role="claimed" />)
+          }
+        </Column>
+        <Column title="Listed Classes" subtitle="Spots you've posted.">
+          {listed.length === 0
+            ? <EmptyState message="No upcoming listings." />
+            : listed.map(s => <SpotCard key={s.id} spot={s} role="listed" />)
+          }
+        </Column>
+      </div>
 
-      <hr style={{ margin: '24px 0' }} />
+      {/* Past — two columns */}
+      <div style={{ borderTop: '1px solid #f0e8e0', paddingTop: 40 }}>
+        <h2 style={{ fontFamily: "'Berkshire Swash', cursive", fontSize: 22, color: '#111', marginBottom: 4 }}>
+          Past Classes
+        </h2>
+        <p style={{ fontSize: 14, color: '#aaa', marginBottom: 24 }}>Classes you've attended or listed in the past.</p>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
+          <Column title="Classes Taken" subtitle="Spots you claimed and attended.">
+            {pastTaken.length === 0
+              ? <EmptyState message="No past classes taken." />
+              : pastTaken.map(s => <SpotCard key={s.id} spot={s} role="claimed" />)
+            }
+          </Column>
+          <Column title="Classes Listed" subtitle="Spots you posted for others.">
+            {pastListed.length === 0
+              ? <EmptyState message="No past listings." />
+              : pastListed.map(s => <SpotCard key={s.id} spot={s} role="listed" />)
+            }
+          </Column>
+        </div>
+      </div>
+    </div>
+  )
+}
 
-      <section>
-        <WaitlistForm seekerId={profile.id} />
-      </section>
+function Column({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <div style={{ marginBottom: 16 }}>
+        <h2 style={{ fontFamily: "'Berkshire Swash', cursive", fontSize: 20, color: '#111', marginBottom: 4 }}>
+          {title}
+        </h2>
+        <p style={{ fontSize: 13, color: '#aaa' }}>{subtitle}</p>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {children}
+      </div>
+    </div>
+  )
+}
 
-      <hr style={{ margin: '24px 0' }} />
+function SpotCard({ spot, role }: { spot: Spot; role: 'claimed' | 'listed' }) {
+  const statusLabel = role === 'claimed' ? 'Claimed by you' : spot.status === 'claimed' ? 'Claimed' : 'Available'
+  const accentColor = spot.status === 'claimed' || role === 'claimed' ? '#22c55e' : '#F35C20'
+  const bgColor = spot.status === 'claimed' || role === 'claimed' ? '#f0fdf4' : '#fff3ee'
+  const isUpcomingClaim = role === 'claimed' && new Date(spot.scheduled_at) > new Date()
 
-      <section>
-        <PostSpotForm posterId={profile.id} onPost={refresh}/>
-      </section>
+  const formattedDate = new Date(spot.scheduled_at).toLocaleString('en-US', {
+    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    month: 'short', day: 'numeric', year: 'numeric',
+    hour: 'numeric', minute: '2-digit'
+  })
 
-      <hr style={{ margin: '24px 0' }} />
+  return (
+    <div style={{
+      background: '#fff',
+      borderRadius: 14,
+      padding: '16px 18px',
+      border: '1px solid #f0e8e0',
+      borderLeft: `5px solid ${accentColor}`,
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, marginBottom: 10 }}>
+        <div>
+          <p style={{ fontSize: 15, fontWeight: 700, color: '#111', marginBottom: 1 }}>
+            {spot.studio}{spot.title && !spot.title.includes('·') ? ` — ${spot.title}` : ''}
+          </p>
+        </div>
+        <span style={{
+          background: bgColor,
+          color: accentColor,
+          fontSize: 11,
+          fontWeight: 700,
+          padding: '3px 10px',
+          borderRadius: 100,
+          whiteSpace: 'nowrap',
+          flexShrink: 0,
+        }}>
+          ● {statusLabel}
+        </span>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+        <DetailRow label="Date" value={formattedDate} />
+        {spot.location && <DetailRow label="Location" value={spot.location} />}
+        {spot.class_level && <DetailRow label="Level" value={spot.class_level} />}
+        {spot.instructor && <DetailRow label="Instructor" value={spot.instructor} />}
+        <DetailRow label="Type" value={spot.class_type} />
+      </div>
 
-      <section>
-        <MyListings key={refreshKey} posterId={profile.id} />
-      </section>
+      {isUpcomingClaim && spot.claim_info && (
+        <div style={{ marginTop: 12, padding: '10px 14px', background: '#f0fdf4', borderRadius: 10, border: '1px solid #86efac' }}>
+          <p style={{ fontWeight: 700, fontSize: 12, marginBottom: 4, color: '#166534' }}>Booking Info</p>
+          <p style={{ fontSize: 12, whiteSpace: 'pre-wrap', color: '#333', margin: 0 }}>{spot.claim_info}</p>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div style={{ display: 'flex', fontSize: 12, marginBottom: 2 }}>
+      <span style={{ color: '#aaa', fontWeight: 600, width: 72, flexShrink: 0 }}>{label}</span>
+      <span style={{ color: '#444' }}>{value}</span>
+    </div>
+  )
+}
+
+function EmptyState({ message }: { message: string }) {
+  return (
+    <div style={{
+      background: '#fff',
+      borderRadius: 14,
+      padding: '24px',
+      border: '1px solid #f0e8e0',
+      textAlign: 'center',
+      color: '#bbb',
+      fontSize: 13,
+    }}>
+      {message}
     </div>
   )
 }

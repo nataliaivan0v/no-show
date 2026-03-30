@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
 import { notifyNextSeeker } from '../../lib/matching'
 
-const CLASS_TYPES = ['Yoga', 'Spin', 'Pilates', 'HIIT', 'Barre']
+const CLASS_TYPES = ['Yoga', 'Spin', 'Pilates', 'HIIT', 'Barre', 'Cycling', 'Boxing', 'Dance', 'Strength', 'Other']
+const CLASS_LEVELS = ['All Levels', 'Beginner', 'Level 1', 'Level 1.5', 'Level 2', 'Intermediate', 'Advanced']
 
 function getNameDisplay(fullName: string): string {
   const parts = fullName.trim().split(' ')
@@ -11,10 +12,14 @@ function getNameDisplay(fullName: string): string {
 }
 
 export default function PostSpotForm({ posterId, onPost }: { posterId: string; onPost: () => void }) {
-  const [title, setTitle] = useState('')
-  const [classType, setClassType] = useState('Yoga')
   const [studio, setStudio] = useState('')
-  const [scheduledAt, setScheduledAt] = useState('')
+  const [className, setClassName] = useState('')
+  const [location, setLocation] = useState('')
+  const [classDate, setClassDate] = useState('')
+  const [classTime, setClassTime] = useState('')
+  const [classType, setClassType] = useState('Yoga')
+  const [classLevel, setClassLevel] = useState('')
+  const [instructor, setInstructor] = useState('')
   const [claimInfo, setClaimInfo] = useState('')
   const [profileName, setProfileName] = useState('')
   const [status, setStatus] = useState('')
@@ -25,28 +30,31 @@ export default function PostSpotForm({ posterId, onPost }: { posterId: string; o
   }, [posterId])
 
   const handleSubmit = async () => {
-    if (!title || !studio || !scheduledAt) { setStatus('Please fill in all fields'); return }
+    if (!studio || !className || !location || !classDate || !classTime || !classType) {
+      setStatus('Please fill in all required fields.')
+      return
+    }
 
-    const classTime = new Date(scheduledAt).getTime()
+    const scheduledAt = new Date(`${classDate}T${classTime}`).toISOString()
     const oneHourFromNow = Date.now() + 60 * 60 * 1000
-
-    if (classTime < Date.now()) { setStatus('❌ This class is in the past.'); return }
-    if (classTime < oneHourFromNow) { setStatus('❌ Class must be at least 1 hour away to give someone enough time to claim it.'); return }
+    if (new Date(scheduledAt).getTime() < Date.now()) { setStatus('❌ This class is in the past.'); return }
+    if (new Date(scheduledAt).getTime() < oneHourFromNow) { setStatus('❌ Class must be at least 1 hour away.'); return }
 
     const bookingLine = `Booking name: ${profileName}`
-    const fullClaimInfo = claimInfo.trim()
-      ? `${bookingLine}\n${claimInfo.trim()}`
-      : bookingLine
+    const fullClaimInfo = claimInfo.trim() ? `${bookingLine}\n${claimInfo.trim()}` : bookingLine
 
     const { data, error } = await supabase
       .from('spots')
       .insert({
         poster_id: posterId,
-        title,
+        title: className.trim(),
         class_type: classType,
         studio,
+        location: location.trim() || null,
         scheduled_at: scheduledAt,
-        claim_info: fullClaimInfo
+        class_level: classLevel || null,
+        instructor: instructor.trim() || null,
+        claim_info: fullClaimInfo,
       })
       .select().single()
 
@@ -56,44 +64,134 @@ export default function PostSpotForm({ posterId, onPost }: { posterId: string; o
     setStatus(notified
       ? '✅ Spot posted! First matched seeker has been notified.'
       : '✅ Spot posted! No matching seekers on the waitlist yet.')
-    setTitle(''); setStudio(''); setScheduledAt(''); setClaimInfo('')
+
+    setStudio(''); setClassName(''); setLocation('')
+    setClassDate(''); setClassTime(''); setClassType('Yoga')
+    setClassLevel(''); setInstructor(''); setClaimInfo('')
     onPost()
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <h3>Post a Spot</h3>
-      <p style={{ fontSize: 14, color: 'gray', margin: 0 }}>
-        Can't make your class? Post your spot so someone else can take it — and you avoid the no-show fee.
+    <div>
+      <h2 style={{ fontFamily: "'Berkshire Swash', cursive", fontSize: 26, color: '#111', marginBottom: 6 }}>
+        Post a Spot
+      </h2>
+      <p style={{ fontSize: 15, color: '#888', marginBottom: 32 }}>
+        Can't make your class? Post your spot so someone else can take it — and avoid the no-show fee.
       </p>
-      <input placeholder="Class name (e.g. Morning Flow)" value={title} onChange={e => setTitle(e.target.value)} />
-      <select value={classType} onChange={e => setClassType(e.target.value)}>
-        {CLASS_TYPES.map(t => <option key={t}>{t}</option>)}
-      </select>
-      <input placeholder="Studio name" value={studio} onChange={e => setStudio(e.target.value)} />
-      <input type="datetime-local" value={scheduledAt} onChange={e => setScheduledAt(e.target.value)} />
 
-      <div style={{ borderTop: '1px solid #eee', paddingTop: 10, marginTop: 4 }}>
-        <label style={{ fontSize: 14, fontWeight: 'bold', display: 'block', marginBottom: 4 }}>
-          Booking Info <span style={{ fontWeight: 'normal', color: 'gray' }}>(only shown after someone claims)</span>
-        </label>
-        {profileName && (
-          <p style={{ fontSize: 13, color: '#6b7280', margin: '0 0 6px' }}>
-            📋 Booking name <strong>{profileName}</strong> will be included automatically.
-            If the class is booked under a different name, note it below.
+      <div style={{ background: '#fff', borderRadius: 16, padding: 32, border: '1px solid #f0e8e0', display: 'flex', flexDirection: 'column', gap: 20, maxWidth: 560, margin: '0 auto' }}>
+
+        <Field label="Studio Name" required>
+          <input placeholder="e.g. SoulCycle" value={studio} onChange={e => setStudio(e.target.value)} style={inputStyle} />
+        </Field>
+
+        <Field label="Class Name" required>
+          <input placeholder="e.g. Morning Flow" value={className} onChange={e => setClassName(e.target.value)} style={inputStyle} />
+        </Field>
+
+        <Field label="Studio Address" required>
+          <input placeholder="e.g. 123 Newbury St, Boston, MA" value={location} onChange={e => setLocation(e.target.value)} style={inputStyle} />
+        </Field>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+          <Field label="Class Date" required>
+            <input type="date" value={classDate} onChange={e => setClassDate(e.target.value)} style={inputStyle} />
+          </Field>
+          <Field label="Class Time" required>
+            <input type="time" value={classTime} onChange={e => setClassTime(e.target.value)} style={inputStyle} />
+          </Field>
+        </div>
+
+        <Field label="Class Type" required>
+          <select value={classType} onChange={e => setClassType(e.target.value)} style={inputStyle}>
+            {CLASS_TYPES.map(t => <option key={t}>{t}</option>)}
+          </select>
+        </Field>
+
+        <Field label="Class Level" optional>
+          <select value={classLevel} onChange={e => setClassLevel(e.target.value)} style={inputStyle}>
+            <option value="">Select a level</option>
+            {CLASS_LEVELS.map(l => <option key={l}>{l}</option>)}
+          </select>
+        </Field>
+
+        <Field label="Instructor Name" optional>
+          <input placeholder="e.g. Sarah M." value={instructor} onChange={e => setInstructor(e.target.value)} style={inputStyle} />
+        </Field>
+
+        <div style={{ borderTop: '1px solid #f0e8e0', paddingTop: 20 }}>
+          <Field label="Additional Booking Info" optional hint="only shown after someone claims">
+            {profileName && (
+              <p style={{ fontSize: 13, color: '#888', marginBottom: 8 }}>
+                📋 <strong>{profileName}</strong> will be included automatically as the booking name.
+                Note below if the class is booked under a different name.
+              </p>
+            )}
+            <textarea
+              placeholder={`e.g.\n• Door code: 1234\n• Check in at the front desk\n• Booked under a different name: Jane D.`}
+              value={claimInfo}
+              onChange={e => setClaimInfo(e.target.value)}
+              rows={4}
+              style={{ ...inputStyle, resize: 'vertical' }}
+            />
+          </Field>
+        </div>
+
+        <button onClick={handleSubmit} style={submitBtnStyle}>Post Spot</button>
+
+        {status && (
+          <p style={{ fontSize: 14, color: status.startsWith('✅') ? '#22c55e' : '#ef4444', margin: 0 }}>
+            {status}
           </p>
         )}
-        <textarea
-          placeholder={`Add anything else the claimer needs, e.g:\n• Door code: 1234\n• Check in at the front desk\n• Booked under a different name: Jane D.`}
-          value={claimInfo}
-          onChange={e => setClaimInfo(e.target.value)}
-          rows={4}
-          style={{ width: '100%', boxSizing: 'border-box', resize: 'vertical' }}
-        />
       </div>
-
-      <button onClick={handleSubmit}>Post Spot</button>
-      {status && <p>{status}</p>}
     </div>
   )
+}
+
+function Field({ label, required, optional, hint, children }: {
+  label: string
+  required?: boolean
+  optional?: boolean
+  hint?: string
+  children: React.ReactNode
+}) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <label style={{ fontSize: 14, fontWeight: 600, color: '#444', fontFamily: "'Afacad', sans-serif", display: 'flex', alignItems: 'center', gap: 6 }}>
+        {label}
+        {optional && <span style={{ fontSize: 12, color: '#aaa', fontWeight: 400 }}>(optional)</span>}
+        {hint && <span style={{ fontSize: 12, color: '#aaa', fontWeight: 400 }}>— {hint}</span>}
+        {required && <span style={{ color: '#F35C20', fontSize: 13 }}>*</span>}
+      </label>
+      {children}
+    </div>
+  )
+}
+
+const inputStyle: React.CSSProperties = {
+  padding: '12px 16px',
+  borderRadius: 10,
+  border: '1.5px solid #e8e0d8',
+  fontSize: 15,
+  fontFamily: "'Afacad', sans-serif",
+  outline: 'none',
+  width: '100%',
+  background: '#fafafa',
+  boxSizing: 'border-box',
+  color: '#111',
+}
+
+const submitBtnStyle: React.CSSProperties = {
+  background: '#F35C20',
+  color: '#fff',
+  border: 'none',
+  padding: '13px',
+  borderRadius: 100,
+  fontSize: 16,
+  fontFamily: "'Afacad', sans-serif",
+  fontWeight: 600,
+  cursor: 'pointer',
+  width: '100%',
 }
