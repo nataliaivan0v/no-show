@@ -193,7 +193,7 @@ function SpotCard({ spot, role }: { spot: Spot; role: 'claimed' | 'listed' }) {
 
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
-    <div style={{ display: 'flex', fontSize: 12, marginBottom: 2 }}>
+    <div style={{ display: 'flex', fontSize: 12, marginBottom: 2, textAlign: "left", paddingLeft: "5px" }}>
       <span style={{ color: '#aaa', fontWeight: 600, width: 72, flexShrink: 0 }}>{label}</span>
       <span style={{ color: '#444' }}>{value}</span>
     </div>

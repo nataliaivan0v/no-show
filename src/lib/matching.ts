@@ -1,79 +1,89 @@
-import { supabase } from './supabase'
+import { supabase } from "./supabase";
 
-// Called when a spot is posted, and after a timeout
 export async function notifyNextSeeker(
   spotId: string,
-  afterEntryId?: string
+  afterEntryId?: string,
 ): Promise<boolean> {
   const { data: spot } = await supabase
-    .from('spots').select('*').eq('id', spotId).single()
-  if (!spot) return false
+    .from("spots")
+    .select("*")
+    .eq("id", spotId)
+    .single();
+  if (!spot) return false;
 
   const { data: matches } = await supabase
-    .from('waitlist_entries')
-    .select('*')
-    .contains('class_types', [spot.class_type])
-    .neq('seeker_id', spot.poster_id)
-    .order('created_at', { ascending: true })
+    .from("waitlist_entries")
+    .select("*")
+    .contains("class_types", [spot.class_type])
+    .neq("seeker_id", spot.poster_id)
+    .order("created_at", { ascending: true });
 
-  if (!matches?.length) return false
+  if (!matches?.length) return false;
 
-  let target = matches[0]
+  let target = matches[0];
   if (afterEntryId) {
-    const idx = matches.findIndex(e => e.id === afterEntryId)
-    if (idx === -1 || idx + 1 >= matches.length) return false
-    target = matches[idx + 1]
+    const idx = matches.findIndex((e) => e.id === afterEntryId);
+    if (idx === -1 || idx + 1 >= matches.length) return false;
+    target = matches[idx + 1];
   }
 
   const details = [
     spot.class_level,
     spot.instructor ? `with ${spot.instructor}` : null,
     spot.location,
-  ].filter(Boolean).join(' · ')
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   const message = [
-    `A ${spot.class_type} spot at ${spot.studio}${spot.title ? ` (${spot.title})` : ''} is available on ${new Date(spot.scheduled_at).toLocaleString()}.`,
+    `A ${spot.class_type} spot at ${spot.studio}${spot.title ? ` (${spot.title})` : ""} is available on ${new Date(spot.scheduled_at).toLocaleString()}.`,
     details || null,
     `Claim it before it's gone!`,
-  ].filter(Boolean).join('\n')
+  ]
+    .filter(Boolean)
+    .join("\n");
 
-  await supabase.from('notifications').insert({
+  await supabase.from("notifications").insert({
     seeker_id: target.seeker_id,
     spot_id: spot.id,
     waitlist_entry_id: target.id,
     message,
-    status: 'pending'
-  })
+    status: "pending",
+  });
 
-  return true
+  return true;
 }
 
-export async function rejectSpot(notifId: string, spotId: string, waitlistEntryId: string): Promise<void> {
+export async function rejectSpot(
+  notifId: string,
+  spotId: string,
+  waitlistEntryId: string,
+): Promise<void> {
   await supabase
-    .from('notifications')
-    .update({ status: 'expired' })
-    .eq('id', notifId)
+    .from("notifications")
+    .update({ status: "expired" })
+    .eq("id", notifId);
 
-  await notifyNextSeeker(spotId, waitlistEntryId)
+  await notifyNextSeeker(spotId, waitlistEntryId);
 }
 
 export async function simulateTimeout(spotId: string): Promise<string> {
   const { data: notif } = await supabase
-    .from('notifications')
-    .select('*')
-    .eq('spot_id', spotId)
-    .eq('status', 'pending')
-    .maybeSingle()
+    .from("notifications")
+    .select("*")
+    .eq("spot_id", spotId)
+    .eq("status", "pending")
+    .maybeSingle();
 
-  if (!notif) return 'No pending notification for this spot'
+  if (!notif) return "No pending notification for this spot";
 
   await supabase
-    .from('notifications')
-    .update({ status: 'expired' })
-    .eq('id', notif.id)
+    .from("notifications")
+    .update({ status: "expired" })
+    .eq("id", notif.id);
 
-  const moved = await notifyNextSeeker(spotId, notif.waitlist_entry_id)
+  const moved = await notifyNextSeeker(spotId, notif.waitlist_entry_id);
   return moved
-    ? '⏱ Timed out — next seeker on waitlist notified'
-    : '⏱ Timed out — waitlist exhausted, no more seekers'
+    ? "⏱ Timed out — next seeker on waitlist notified"
+    : "⏱ Timed out — waitlist exhausted, no more seekers";
 }
