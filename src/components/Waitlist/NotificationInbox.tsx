@@ -34,6 +34,7 @@ function Countdown({
   // Ref prevents onExpire from firing more than once if the interval ticks at 0 multiple times
   const firedRef = useRef(false);
 
+  // Sets up a countdown timer that fires a callback when time runs out
   useEffect(() => {
     const interval = setInterval(() => {
       const r = calcRemaining();
@@ -106,16 +107,19 @@ export default function NotificationInbox({ seekerId }: { seekerId: string }) {
     spotId: string,
     waitlistEntryId: string,
   ) => {
+    // updates the notification to show claimed
     await supabase
       .from("notifications")
       .update({ status: "claimed" })
-      .eq("id", notifId);
-    await supabase.from("spots").update({ status: "claimed" }).eq("id", spotId);
-    // Bumping created_at resets the entry's position so it goes to the back of the queue next time
+      .eq("id", notifId); 
+    // mark the spot as claimed
+    await supabase.from("spots").update({ status: "claimed" }).eq("id", spotId); 
+    // Bumping created_at resets the entry's position so it goes to the back of the queue next time (sorted by oldest first)
     await supabase
       .from("waitlist_entries")
       .update({ created_at: new Date().toISOString() })
       .eq("id", waitlistEntryId);
+    // fetch spot details and refresh
     const { data: spot } = await supabase
       .from("spots")
       .select("*")

@@ -32,13 +32,7 @@ function getNameDisplay(fullName: string): string {
   return `${parts[0]} ${parts[parts.length - 1][0]}.`;
 }
 
-export default function PostSpotForm({
-  posterId,
-  onPost,
-}: {
-  posterId: string;
-  onPost: () => void;
-}) {
+export default function PostSpotForm({ posterId }: { posterId: string }) {
   const [studio, setStudio] = useState("");
   const [className, setClassName] = useState("");
   const [location, setLocation] = useState("");
@@ -133,7 +127,6 @@ export default function PostSpotForm({
     setClassLevel("");
     setInstructor("");
     setClaimInfo("");
-    onPost();
   };
 
   return (

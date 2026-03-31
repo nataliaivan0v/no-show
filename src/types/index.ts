@@ -13,7 +13,7 @@ export interface Profile {
 export interface Spot {
   id: string;
   poster_id: string; // the user who posted the spot (references profiles.id)
-  title: string;     // class name, e.g. "Morning Flow"
+  title: string; // class name, e.g. "Morning Flow"
   class_type: string;
   studio: string;
   location: string | null;
@@ -28,7 +28,7 @@ export interface Spot {
 export interface WaitlistEntry {
   id: string;
   seeker_id: string;
-  class_types: string[]; // multi-select — seeker is interested in any of these types
+  class_types: string[]; // multi-select, seeker is interested in any of these types
   class_level: string | null;
   time_preferences: string[] | null; // "morning" | "afternoon" | "evening", or null for any
   created_at: string; // used as the queue position; bumped to now after a successful claim

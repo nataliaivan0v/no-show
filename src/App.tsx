@@ -19,11 +19,76 @@ import NotificationInbox from "./components/Waitlist/NotificationInbox";
 import WaitlistForm from "./components/Waitlist/WaitlistForm";
 import PostSpotForm from "./components/Spots/PostSpotForm";
 
+export default function App() {
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // Check for an existing session on mount (e.g. page refresh while already logged in)
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) fetchProfile(session.user.id);
+      else setLoading(false);
+    });
+
+    // Also listen for auth changes — handles login/logout from LoginPage and SignupPage
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_e, session) => {
+      if (session?.user) fetchProfile(session.user.id);
+      else {
+        setProfile(null);
+        setLoading(false);
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const fetchProfile = async (uid: string) => {
+    const { data: profileData } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", uid)
+      .single();
+    // Email lives in auth.users, not the profiles table, so we fetch it separately
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    setProfile({ ...profileData, email: user?.email ?? null });
+    setLoading(false);
+  };
+
+  if (loading) return <p style={{ padding: 24 }}>Loading...</p>;
+
+  return (
+    <BrowserRouter>
+      <Routes>
+        {/* Public routes — redirect to dashboard if already logged in */}
+        <Route
+          path="/"
+          element={!profile ? <LandingPage /> : <Navigate to="/dashboard" />}
+        />
+        <Route
+          path="/login"
+          element={!profile ? <LoginPage /> : <Navigate to="/dashboard" />}
+        />
+        <Route
+          path="/signup"
+          element={!profile ? <SignupPage /> : <Navigate to="/dashboard" />}
+        />
+        {/* All other routes require auth — redirect to landing if not logged in */}
+        <Route
+          path="/*"
+          element={
+            profile ? <AuthedLayout profile={profile} /> : <Navigate to="/" />
+          }
+        />
+      </Routes>
+    </BrowserRouter>
+  );
+}
+
 // Wraps all authenticated routes — owns the Navbar and the inbox badge count
 function AuthedLayout({ profile }: { profile: Profile }) {
-  // refreshKey is incremented after posting a spot; not consumed here but can be
-  // passed down to trigger re-fetches in child components if needed in future
-  const [, setRefreshKey] = useState(0);
   const [pendingCount, setPendingCount] = useState(0);
   const location = useLocation();
 
@@ -95,10 +160,7 @@ function AuthedLayout({ profile }: { profile: Profile }) {
             path="/post"
             element={
               <PageWrapper>
-                <PostSpotForm
-                  posterId={profile.id}
-                  onPost={() => setRefreshKey((k) => k + 1)}
-                />
+                <PostSpotForm posterId={profile.id} />
               </PageWrapper>
             }
           />
@@ -125,73 +187,5 @@ function PageWrapper({ children }: { children: React.ReactNode }) {
     <div style={{ padding: "40px 48px", maxWidth: 860, margin: "0 auto" }}>
       {children}
     </div>
-  );
-}
-
-export default function App() {
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    // Check for an existing session on mount (e.g. page refresh while already logged in)
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) fetchProfile(session.user.id);
-      else setLoading(false);
-    });
-
-    // Also listen for auth changes — handles login/logout from LoginPage and SignupPage
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_e, session) => {
-      if (session?.user) fetchProfile(session.user.id);
-      else {
-        setProfile(null);
-        setLoading(false);
-      }
-    });
-    return () => subscription.unsubscribe();
-  }, []);
-
-  const fetchProfile = async (uid: string) => {
-    const { data: profileData } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("id", uid)
-      .single();
-    // Email lives in auth.users, not the profiles table, so we fetch it separately
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    setProfile({ ...profileData, email: user?.email ?? null });
-    setLoading(false);
-  };
-
-  if (loading) return <p style={{ padding: 24 }}>Loading...</p>;
-
-  return (
-    <BrowserRouter>
-      <Routes>
-        {/* Public routes — redirect to dashboard if already logged in */}
-        <Route
-          path="/"
-          element={!profile ? <LandingPage /> : <Navigate to="/dashboard" />}
-        />
-        <Route
-          path="/login"
-          element={!profile ? <LoginPage /> : <Navigate to="/dashboard" />}
-        />
-        <Route
-          path="/signup"
-          element={!profile ? <SignupPage /> : <Navigate to="/dashboard" />}
-        />
-        {/* All other routes require auth — redirect to landing if not logged in */}
-        <Route
-          path="/*"
-          element={
-            profile ? <AuthedLayout profile={profile} /> : <Navigate to="/" />
-          }
-        />
-      </Routes>
-    </BrowserRouter>
   );
 }

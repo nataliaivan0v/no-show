@@ -107,6 +107,7 @@ export default function WaitlistForm({ seekerId }: { seekerId: string }) {
     setStatus("✅ You're on the waitlist!");
   };
 
+  // allows users to update waitlist preferences
   const handleUpdate = async () => {
     if (!selectedTypes.length) {
       setStatus("Please select at least one class type.");

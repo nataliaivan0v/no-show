@@ -14,6 +14,7 @@ export default function AccountPage({
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(false);
 
+  // allows users to update their name in the account tab
   const handleSave = async () => {
     if (!fullName.trim()) {
       setStatus("Name cannot be empty.");

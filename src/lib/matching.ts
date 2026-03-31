@@ -35,7 +35,7 @@ export async function notifyNextSeeker(
     target = matches[idx + 1];
   }
 
-  // Build an optional detail line (e.g. "Level 2 · with Sarah M. · 123 Newbury St")
+  // Build a detail line (e.g. "Level 2 · with Sarah M. · 123 Newbury St")
   const details = [
     spot.class_level,
     spot.instructor ? `with ${spot.instructor}` : null,
@@ -76,27 +76,4 @@ export async function rejectSpot(
     .eq("id", notifId);
 
   await notifyNextSeeker(spotId, waitlistEntryId);
-}
-
-// Dev/test utility to manually trigger a timeout on a spot's pending notification,
-// simulating what happens when a seeker's 30-minute claim window runs out
-export async function simulateTimeout(spotId: string): Promise<string> {
-  const { data: notif } = await supabase
-    .from("notifications")
-    .select("*")
-    .eq("spot_id", spotId)
-    .eq("status", "pending")
-    .maybeSingle();
-
-  if (!notif) return "No pending notification for this spot";
-
-  await supabase
-    .from("notifications")
-    .update({ status: "expired" })
-    .eq("id", notif.id);
-
-  const moved = await notifyNextSeeker(spotId, notif.waitlist_entry_id);
-  return moved
-    ? "⏱ Timed out — next seeker on waitlist notified"
-    : "⏱ Timed out — waitlist exhausted, no more seekers";
 }
